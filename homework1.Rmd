@@ -1,0 +1,170 @@
+---
+title: "homework1"
+author: "Shan"
+date: "9/4/2020"
+output: html_document
+---
+
+```{r setup}
+library(data.table)
+library(tidyverse) 
+library(leaflet)
+```
+
+-Primary question: whether daliy concentrations of PM2.5 have decreased in California over the last 15 years(from 2004 to 2019)
+
+-Step1:
+Summary: There are 19233 rows and 20 columns in 2004 dataset, no missing data, and the highest pm2.5 value is 251.00ug/m3 in the Yosimite on 07/18/2004, which is suspicious;There are 53328 rows and 20 columns in 2019 dataset, no missing data, and the highest pm2.5 value is 120.9ug/m3 in the Los Angeles on 10/11/2019, which is reasonable.
+
+```{r}
+pm_2004 = data.table::fread("/Users/haoyueshan/Desktop/PM566/week3/ad_viz_plotval_data_2004.csv")
+pm_2019 = data.table::fread("/Users/haoyueshan/Desktop/PM566/week3/ad_viz_plotval_data_2019.csv")
+dim(pm_2004)
+head(pm_2004)
+tail(pm_2004)
+str(pm_2004)
+    
+dim(pm_2019)
+head(pm_2019)
+tail(pm_2019)
+str(pm_2019)
+```
+```{r}
+summary(pm_2004$`Daily Mean PM2.5 Concentration`)
+table(pm_2004$STATE)
+dim(pm_2004[is.na(`Daily Mean PM2.5 Concentration`)])[1]/dim(pm_2004)[1]
+ss1 = pm_2004[`Daily Mean PM2.5 Concentration` == 251.00, .(`Date`, `Site Name`, `COUNTY`,`DAILY_AQI_VALUE`)] 
+table(ss1)
+```
+```{r}
+summary(pm_2019$`Daily Mean PM2.5 Concentration`)
+table(pm_2019$STATE)
+dim(pm_2019[is.na(`Daily Mean PM2.5 Concentration`)])[1]/dim(pm_2019)[1]
+ss2 = pm_2019[`Daily Mean PM2.5 Concentration` == 120.90, .(`Date`, `Site Name`, `COUNTY`,`DAILY_AQI_VALUE`)] 
+table(ss2)
+```
+
+
+
+-Step2 
+```{r}
+total = rbind(pm_2004,pm_2019)
+total = rename(total, pm2.5 = `Daily Mean PM2.5 Concentration`, lat = `SITE_LATITUDE`, lon = `SITE_LONGITUDE`,  state = `STATE`, county = `COUNTY`, siteid = `Site ID`, sitename = `Site Name`)
+head(total)
+tail(total)
+```
+```{r}
+library(date)
+Date = total$Date
+Date = as.date(Date)
+temp = date.mdy(Date)$year
+total = mutate(total, year = temp)
+head(total)
+tail(total)
+```
+
+-Step3
+The blue markers stand for sites in 2004, and the red markers stand for sites in 2019. Overall, there is more sites have been built in 2019 than 2004. For both year showed, the sites are more dense in the metropolis area, such as Sacramento, Oakland and Los Angeles.
+(I was trying use the codes at the bottom to drew both year in one map but it took forever and never show anything. Please let me know if there are anything I can do. )
+
+```{r,-test leaflet}
+leaflet(pm_2004)%>%
+  addProviderTiles('OpenStreetMap')%>%
+  addCircles(lat=~`SITE_LATITUDE`, lng=~`SITE_LONGITUDE`, opacity = 1,fillOpacity = 1,radius = 100)
+```
+```{r}
+leaflet(pm_2019)%>%
+  addProviderTiles('OpenStreetMap')%>%
+  addCircles(lat=~`SITE_LATITUDE`, lng=~`SITE_LONGITUDE`, opacity = 1,fillOpacity = 1,radius = 100,color = "red")
+```
+***(trying to add two layers of addCircles but is not working)
+
+leaflet()%>%
+  addProviderTiles('OpenStreetMap')%>%
+  addCircles(data = pm_2004, lat=~`SITE_LATITUDE`, lng=~`SITE_LONGITUDE`, opacity = 1,fillOpacity = 1,radius = 100,color = "blue")
+  addCircles(data = pm_2019, lat=~`SITE_LATITUDE`, lng=~`SITE_LONGITUDE`, opacity = 1,fillOpacity = 1,radius = 100,color = "red")
+
+
+
+***(try to drew the map in one but not work out)
+
+getColor <- function(total){
+  sapply(total$year, function(year){
+    if (year==2004){
+         "green"
+    } else {
+        "red"
+    } })
+}
+
+
+
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor
+  )
+
+
+
+leaflet(total)%>%
+  addProviderTiles('OpenStreetMap')%>%
+  addAwesomeMarkers(~lat,~lon,icon = icons)
+***
+
+-Step4
+There is no missing value in the combined data set. The negative value of pm2.5 is impossible so we remove them;  the 251.0 is very suspicious but given the external sources i would keep this data point for further inspection. Overall, the max,  mean and median value of pm2.5 are all lower in 2019 than 2004. 
+```{r}
+dim(total[is.na(`pm2.5`)])[1]/dim(total)[1]
+ss = total[`pm2.5` >= 120.9 , .(`Date`, `sitename`, `county`)] 
+table(ss)
+```
+
+```{r}
+summary(total$pm2.5)
+total2 = total[pm2.5>=0]
+head(total2)
+tail(total2)
+summary(total2$pm2.5)
+summary(pm_2004$`Daily Mean PM2.5 Concentration`)
+summary(pm_2019$`Daily Mean PM2.5 Concentration`)
+```
+
+
+
+
+-Step5 
+-Primary question: whether daily concentrations of PM2.5 have decreased in California over the last 15 years(from 2004 to 2019)
+-state(state)
+-county(county)
+-site in Los Angeles
+
+Overall, the mean value of pm2.5 for both years is 9.211 ug/m3, and the mean value of pm2.5 has decreased from 13.13 to 9.211ug/m3 for the entire California State; for all the site in Los Angeles, the mean value of pm2.5 has decreased from 17.1 to 10.17ug/m3; consider the county level, we can compute the difference of pm2.5 in 2004 and 2019， most of them are above 0. The mean pm2.5  decreased from 2004 to 2019 for most counties in California.
+```{r}
+summary(total2$pm2.5)
+```
+
+```{r}
+siteinLA_2004 = filter(total2, county =="Los Angeles", year =="2004")
+siteinLA_2019 = filter(total2, county =="Los Angeles", year =="2019")
+summary(siteinLA_2004$pm2.5)
+summary(siteinLA_2019$pm2.5)
+hist(siteinLA_2004$pm2.5)
+hist(siteinLA_2019$pm2.5)
+```
+```{r}
+county = total2 %>% select(pm2.5, county,year)
+head(county)
+str(county)
+countypm2.5=tapply(county$pm2.5,county[,c(3,2)],mean)
+county_diff=data.frame(countypm2.5[1,]-countypm2.5[2,])
+county_diff
+```
+
+
+
+
+
+
+
