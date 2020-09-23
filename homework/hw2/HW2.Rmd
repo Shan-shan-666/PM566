@@ -1,0 +1,199 @@
+---
+title: "Untitled"
+author: "Shan"
+date: "9/22/2020"
+output: html_document
+---
+
+```{r setup}
+library(data.table)
+library(tidyverse)
+library(dtplyr)
+```
+##data wrangling 
+*merge the data
+
+```{r}
+indi = data.table::fread("/Users/haoyueshan/Desktop/pm566/lab&hw/PM566/homework/hw2/chs_individual.csv")
+head(indi)
+dim(indi)
+reg = data.table::fread("/Users/haoyueshan/Desktop/pm566/lab&hw/PM566/homework/hw2/chs_regional.csv")
+head(reg)
+dim(reg)
+```
+```{r}
+temp = merge(
+  x = indi,
+  y = reg,
+  by.x = "townname",
+  by.y = "townname",
+  all.x = TRUE,
+  all.y = FALSE
+) 
+dim(temp)
+head(temp)
+```
+```{r}
+list_na = colnames(temp)[ apply(temp, 2, anyNA) ]
+list_na
+```
+
+*the merged data set has same row number as the individual data set, we did not detact duplicated data.
+
+*impute the data and make a new categorical variable 
+```{r}
+temp[,bmimean:=mean(bmi,na.rm=TRUE),by=.(male, hispanic)]
+temp[,bmi:=ifelse(is.na(bmi),bmimean,bmi)]
+temp[,fevmean:=mean(fev,na.rm=TRUE),by=.(male, hispanic)]
+temp[,fev:=ifelse(is.na(fev),fevmean,fev)]
+summary(temp$bmi)
+obesity_level = cut(temp$bmi, br=c(0,14,22,24,42), labels = c("underweight","normal","overweight","obese"))
+temp = mutate(temp, obesity_level = obesity_level)
+head(temp)
+summary(temp$obesity_level)
+summary(temp$bmi)
+```
+
+*make another "smoke_gas_exposure" categorical varible(smoke&gasstove)
+*both the smoke and gasstove are dummy variable hence we do not impute the NA using mean values
+```{r}
+temp = temp %>% mutate(smoke_gas_exposure = case_when(smoke==0 | gasstove ==0 ~ "no exposure",
+                                                         smoke==0 | gasstove==1 ~ "gas only",
+                                                         smoke==1 | gasstove ==0~ "smoke only",
+                                                         smoke==1 |  gasstove ==1 ~ "smoke and gas")
+)
+head(temp)
+```
+
+*Create four summary tables showing the average (or proportion, if binary) and sd of “Forced expiratory volume in 1 second (ml)” and asthma indicator by town, sex, obesity level, and “smoke_gas_exposure."
+```{r}
+#by town
+  temp %>% group_by(townname) %>%
+    summarise(
+      fev_avg      = mean(fev, na.rm=TRUE),
+      asthma_avg      = mean(asthma, na.rm=TRUE),
+      fev_sd = sd(fev, na.rm = TRUE)
+    ) %>% arrange(townname) %>% head(n = 4)
+```
+
+```{r}
+#by sex
+  temp %>% group_by(male) %>%
+    summarise(
+      fev_avg      = mean(fev, na.rm=TRUE),
+      asthma_avg      = mean(asthma, na.rm=TRUE),
+      fev_sd = sd(fev, na.rm = TRUE)
+    ) %>% arrange(male) %>% head(n = 4)
+```
+```{r}
+#by obesity_level
+  temp %>% group_by(obesity_level) %>%
+    summarise(
+      fev_avg      = mean(fev, na.rm=TRUE),
+      asthma_avg      = mean(asthma, na.rm=TRUE),
+      fev_sd = sd(fev, na.rm = TRUE)
+    ) %>% arrange(obesity_level) %>% head(n = 4)
+```
+```{r}
+#by smoke_gas_exposure
+  temp %>% group_by(smoke_gas_exposure) %>%
+    summarise(
+      fev_avg      = mean(fev, na.rm=TRUE),
+      asthma_avg      = mean(asthma, na.rm=TRUE),
+      fev_sd = sd(fev, na.rm = TRUE)
+    ) %>% arrange(smoke_gas_exposure) %>% head(n = 4)
+```
+
+## looking at the data (EDA)
+#step 1 
+```{r}
+dim(temp)
+head(temp)
+str(temp)
+table(temp$fev)
+table(temp$obesity_level)
+table(temp$pm25_mass)
+table(temp$smoke_gas_exposure)
+cor(temp$fev, temp$bmi, use = "complete")
+cor(temp$fev, temp$pm25_mass, use = "complete")
+```
+# the relationship between fev and bmi is relatively corrlated, the relationship between fev and pm2.5_mass is not very corrlated; the smoke_gas_exposure variable is catigorical, if we want to examine the corration between this variable and fev, we need to change it into dummy variable.
+```{r}
+hist(temp$bmi)
+hist(temp$fev)
+hist(temp$pm25_mass)
+```
+#1.Facet plot showing scatterplots with regression lines of BMI vs FEV by “townname”.
+```{r}
+library(ggplot2)
+temp%>%
+  filter(!(townname%in% NA))%>%
+  ggplot(mapping = aes(x = fev, y = bmi,color = townname))+
+  geom_point()+
+  stat_smooth(method=lm)+
+  facet_wrap(~townname,nrow = 2)
+```
+# from the scatter plots,, we can see that in all 16 towns the fev is positive corrolated with bmi. 
+
+#2.Stacked histograms of FEV by BMI category ,
+#and FEV by smoke/gas exposure. Use different color schemes than the ggplot default.
+```{r}
+temp%>%
+  filter(!(obesity_level%in% NA))%>%
+ggplot(mapping = aes (x= fev, fill = obesity_level))+
+  geom_histogram()+
+  scale_fill_brewer()+
+  theme_bw()
+```
+```{r}
+temp%>%
+  filter(!(smoke_gas_exposure%in% NA))%>%
+ggplot(mapping = aes (x= fev, fill = smoke_gas_exposure))+
+  geom_histogram()+
+  scale_fill_brewer(palette = 'GnBu')+
+  theme_bw()
+```
+# it looks like the distribution of fev value in underweight group is most normally distributed compare with other obesity levels, , and the the distribution of fev value in "gas only" and "no exposure" group are both normally distributed and quite similar to each other. 
+
+#3.Barchart of BMI by smoke/gas exposure.
+```{r}
+temp%>%
+  filter(!(smoke_gas_exposure%in% NA)) %>%
+  ggplot(mapping = aes(x = obesity_level, fill = smoke_gas_exposure))+
+  geom_bar()+
+  scale_fill_brewer(palette = "OrPu")
+```
+# from the bar chart we call tell that for all four obseity level, the "no exposure" conuts most compare with other smoke-gas-exposure level, and the normal level of obesity has the most count.
+
+ #4. Statistical summary graphs of FEV by BMI and FEV by smoke/gas exposure category.
+```{r}
+ temp%>%
+  filter(!(fev%in% NA)) %>%
+  ggplot(mapping = aes(x = obesity_level, y=fev))+
+  stat_summary()
+```
+```{r}
+temp%>%
+  filter(!(fev%in% NA)) %>%
+  ggplot(mapping = aes(x = smoke_gas_exposure, y=fev))+
+  stat_summary()
+```
+# from the statistic summary above, we can tell that the mean value of fev become higher when th obesity level increase.Besides the "normal" level, other's se of fev are relatively similar; the mean value of fev are same for "gas only" and "no exposre" exposure level. 
+#5. A leaflet map showing the concentrations of PM2.5 mass in each of the CHS communities.
+```{r}
+library(leaflet)
+leaflet(temp) %>%
+  addProviderTiles('OpenStreetMap') %>%
+  addCircles(lat=~lat, lng=~lon, color="blue",opacity=1,
+             fillOpacity=1, radius=~(pm25_mass))
+```
+# for the map above we can tell that towns in east Los Angeles has higher concentration of pm2.5 mass than other towns in the map.
+
+# 6.Choose a visualization to examine whether PM2.5 mass is associated with FEV.
+```{r}
+temp %>%
+  filter(!(pm25_mass %in% NA)) %>%
+  ggplot(mapping = aes(x= pm25_mass, y=fev))+
+  geom_point()+
+  stat_smooth(method = lm)
+```
