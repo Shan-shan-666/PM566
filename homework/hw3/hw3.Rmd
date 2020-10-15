@@ -2,7 +2,7 @@
 title: "Assignment03"
 author: "Shan"
 date: "10/13/2020"
-output: github_document
+output: html_document
 ---
 
 ```{r,setup}
